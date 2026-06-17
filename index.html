@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TDA vs FFT Signal Detection Simulation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+  <header class="bg-slate-900 text-white p-4 flex items-center shadow-md z-10 relative">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3 text-emerald-400"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
+    <h1 class="text-xl font-medium tracking-tight">Topological Signal Detection</h1>
+    <div class="ml-10 flex space-x-1 bg-slate-800 p-1 rounded-lg">
+      <button id="tab-visualizer" class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors bg-slate-700 text-white" onclick="switchTab('visualizer')">1. Phenomenological Visualizer</button>
+      <button id="tab-experiment" class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors text-slate-400 hover:text-slate-200" onclick="switchTab('experiment')">2. Monte Carlo Studies</button>
+      <button id="tab-documentation" class="px-4 py-1.5 text-sm font-medium rounded-md transition-colors text-slate-400 hover:text-slate-200" onclick="switchTab('documentation')">3. Research Documentation</button>
+    </div>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden">
+    <!-- VISUALIZER SIDEBAR -->
+    <aside class="w-80 bg-white border-r border-slate-200 flex flex-col overflow-y-auto" id="sidebar-visualizer">
+      <div class="p-4 border-b border-slate-100">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Analysis Scenarios</h2>
+        <div class="space-y-1" id="levels-container"></div>
+      </div>
+      <div class="p-5 flex-1 bg-slate-50/50">
+        <div class="flex items-start text-sm text-slate-700 bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 font-medium">
+          <p id="level-description"></p>
+        </div>
+        <div class="space-y-5">
+          <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Environment Params</h3>
+          <div>
+            <div class="flex justify-between mb-1 text-xs font-semibold text-slate-600"><span>Amplitude (A)</span><span id="val_A" class="bg-slate-100 px-1.5 py-0.5 rounded font-mono">1.00</span></div>
+            <input type="range" id="input_A" min="0" max="2" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="updateParam('A', this.value)">
+          </div>
+          <div>
+            <div class="flex justify-between mb-1 text-xs font-semibold text-slate-600"><span>Noise StDev (σ)</span><span id="val_sigma" class="bg-slate-100 px-1.5 py-0.5 rounded font-mono">0.00</span></div>
+            <input type="range" id="input_sigma" min="0" max="2" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="updateParam('sigma', this.value)">
+          </div>
+          <div>
+            <div class="flex justify-between mb-1 text-xs font-semibold text-slate-600"><span>Frequency (Hz)</span><span id="val_f" class="bg-slate-100 px-1.5 py-0.5 rounded font-mono">5.00</span></div>
+            <input type="range" id="input_f" min="1" max="20" step="0.5" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="updateParam('f', this.value)">
+          </div>
+          <div id="drift-container" style="display: none;">
+            <div class="flex justify-between mb-1 text-xs font-semibold text-slate-600"><span>Drift (Hz/s)</span><span id="val_driftRate" class="bg-slate-100 px-1.5 py-0.5 rounded font-mono">0.00</span></div>
+            <input type="range" id="input_driftRate" min="0" max="3" step="0.1" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" oninput="updateParam('driftRate', this.value)">
+          </div>
+          <div id="noise-type-container" class="flex space-x-1 pt-2">
+             <button id="btn-noise-gaussian" class="flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-slate-800 text-white border-slate-800" onclick="updateParam('noiseType', 'gaussian')">Gaussian</button>
+             <button id="btn-noise-impulsive" class="flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-white text-slate-600 border-slate-200" onclick="updateParam('noiseType', 'impulsive')">Impulsive</button>
+             <button id="btn-noise-pink" class="flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-white text-slate-600 border-slate-200" onclick="updateParam('noiseType', 'pink')">Pink (1/f)</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- EXPERIMENT SIDEBAR -->
+    <aside class="w-80 bg-white border-r border-slate-200 flex flex-col overflow-y-auto hidden" id="sidebar-experiment">
+      <div class="p-4 border-b border-slate-100">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Study Selection</h2>
+        <div class="space-y-1" id="studies-container">
+           <button id="btn-study-1" class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium bg-emerald-50 text-emerald-700" onclick="selectStudy(1)">Study 1: Base Amplitude Sweep</button>
+           <button id="btn-study-2" class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium text-slate-600 hover:bg-slate-100" onclick="selectStudy(2)">Study 2: Frequency Drift Tolerance</button>
+           <button id="btn-study-3" class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium text-slate-600 hover:bg-slate-100" onclick="selectStudy(3)">Study 3: Dark Matter Axion Proxy</button>
+           <button id="btn-study-4" class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium text-slate-600 hover:bg-slate-100" onclick="selectStudy(4)">Study 4: ROC Analysis (Detection Theory)</button>
+           <button id="btn-study-5" class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium text-slate-600 hover:bg-slate-100" onclick="selectStudy(5)">Study 5: Runtime Complexity</button>
+        </div>
+      </div>
+      <div class="p-5 flex-1 bg-slate-50/50 flex flex-col">
+         <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+            <h3 class="text-sm font-semibold text-slate-800">Hypothesis & Design</h3>
+            <p id="study-description" class="text-sm text-slate-600 mt-2 leading-relaxed">
+              <strong>Amplitude Sweep:</strong> Stationarity holds. Varies Signal Amplitude (A) under fixed Gaussian Noise (σ=1.0). Benchmarks classical breaking point.
+            </p>
+         </div>
+         <div class="mt-auto">
+             <button id="btn-run-exp" onclick="runExperiment()" class="w-full flex justify-center items-center py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+               Run 700 Realizations
+             </button>
+         </div>
+      </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto p-6 bg-slate-50 relative">
+      <!-- VISUALIZER VIEW -->
+      <div id="view-visualizer">
+        <div class="grid grid-cols-2 gap-6 mb-6">
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center">
+            <div class="w-12 h-12 rounded-full flex items-center justify-center mr-4 bg-blue-50">
+               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600 w-6 h-6"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            </div>
+            <div>
+              <p class="text-sm text-slate-500 font-medium">Naive DFT Score (SNR)</p>
+              <div class="flex items-baseline mt-0.5">
+                <p class="text-3xl font-bold font-mono text-slate-900" id="metric-fft">0.00</p>
+                <span class="ml-3 text-xs text-slate-400">Target Freq Power Ratio (O(N²))</span>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center">
+            <div class="w-12 h-12 rounded-full flex items-center justify-center mr-4 bg-orange-50">
+               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-600 w-6 h-6"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>
+            </div>
+            <div>
+              <p class="text-sm text-slate-500 font-medium">True H1 Persistence (Vietoris-Rips)</p>
+              <div class="flex items-baseline mt-0.5">
+                <p class="text-3xl font-bold font-mono text-slate-900" id="metric-tda">0.000</p>
+                <span class="ml-3 text-xs text-slate-400">Sum of H1</span>
+                <p class="text-2xl font-bold font-mono text-slate-700 ml-4" id="metric-tda-max">0.000</p>
+                <span class="ml-2 text-xs text-slate-400">Max of H1 | VR 2D Delay</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 xl:col-span-3">
+            <h3 class="text-base font-semibold text-slate-800 mb-4" id="chart1-title">Real-Time Signal x(t)</h3>
+            <div class="h-48 relative">
+              <canvas id="chart-timeseries"></canvas>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="text-base font-semibold text-slate-800 mb-4">Discrete Fourier Power Spectrum</h3>
+            <div class="h-64 relative">
+              <canvas id="chart-fft"></canvas>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="text-base font-semibold text-slate-800 mb-4" id="chart3-title">Takens Delay Embedding</h3>
+            <div class="h-64 relative">
+              <canvas id="chart-tda"></canvas>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="text-base font-semibold text-slate-800 mb-4" id="chart4-title">Vietoris-Rips Persistence Diagram</h3>
+            <div class="h-64 relative">
+              <canvas id="chart-diagram"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- EXPERIMENT VIEW -->
+      <div id="view-experiment" class="hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 mb-6">
+           <h3 class="text-xl font-semibold text-slate-900 mb-2">Detection Efficiency Curves</h3>
+           <p class="text-slate-500 mb-6 max-w-2xl text-sm">Monte Carlo comparison running identical signals through both detection pipelines. Evaluates true-positive rates above the 95th-percentile noise threshold.</p>
+           
+           <div class="h-80 relative flex flex-col items-center justify-center">
+              <div id="experiment-empty" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 z-10 text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300 mb-4"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                <p class="text-slate-500 font-medium text-lg">Awaiting Initialization</p>
+                <p class="text-slate-400 text-sm mt-2">Select a study and initialize realizations to compute performance matrices.</p>
+              </div>
+              <canvas id="chart-experiment"></canvas>
+           </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <h3 class="text-lg font-semibold text-slate-900 mb-4">Quantitative Analysis</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse border border-slate-200 rounded-lg">
+                    <thead class="bg-slate-50">
+                        <tr class="border-b border-slate-200">
+                            <th id="th-param" class="px-5 py-3 text-sm font-semibold text-slate-600 tracking-wider">Sweep Parameter</th>
+                            <th class="px-5 py-3 text-sm font-semibold text-slate-600 tracking-wider">Naïve DFT Det.</th>
+                            <th class="px-5 py-3 text-sm font-semibold text-slate-600 tracking-wider">STDFT Det.</th>
+                            <th class="px-5 py-3 text-sm font-semibold text-slate-600 tracking-wider">TDA Det.</th>
+                            <th class="px-5 py-3 text-sm font-semibold text-slate-600 tracking-wider">TDA vs Best</th>
+                        </tr>
+                    </thead>
+                    <tbody id="experiment-table-body">
+                        <!-- Data injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      </div>
+
+      <!-- DOCUMENTATION VIEW -->
+      <div id="view-documentation" class="hidden max-w-4xl mx-auto space-y-8 pb-12">
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+          <h2 class="text-2xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">Topological Signal Detection: Research Documentation</h2>
+          
+          <div class="prose prose-slate max-w-none text-sm leading-relaxed">
+            <h3 class="text-slate-800 font-semibold text-lg mt-6 mb-2">1. Motivation</h3>
+            <p>Classical signal detection theories assume signal stationarity over the observation window. Standard matched filters and Fast Fourier Transforms (FFT) lose significant efficacy (SNR collapse) when coherent signals undergo arbitrary frequency drift, modulation, or finite-coherence damping. We explore Nonlinear Topological Data Analysis (TDA)—specifically Takens delay embedding coupled with Vietoris-Rips persistent homology—as a robust alternative for detecting highly noisy, non-stationary periodic signals.</p>
+
+            <h3 class="text-slate-800 font-semibold text-lg mt-8 mb-2">2. Why TDA?</h3>
+            <p>A periodic signal, regardless of its instantaneous frequency drift ($f(t) = f_0 + \dot{f}t$) or phase noise, natively traces out a closed 1-dimensional cycle (a "circle") in its phase space. Additive noise simply thickens this circular manifold, while drift non-uniformly parameterizes it. Persistent homology is mathematically invariant to continuous deformation, making it structurally immune to the energy-smearing that plagues classical Fourier estimators under drift scenarios.</p>
+
+            <h3 class="text-slate-800 font-semibold text-lg mt-8 mb-2">3. Signal Model</h3>
+            <p>The generalized discrete time-series observable $x[n]$ is given by:
+            <br/><br/>
+            $x[n] = A[n] \sin\left(2\pi \int (f_0 + \dot{f}t)dt\right) + w[n]$
+            <br/><br/>
+            where $A[n]$ simulates coherence degradation, $\dot{f}$ represents the linear frequency drift rate, and $w[n]$ corresponds to additive noise (Gaussian, Impulsive, or Pink).</p>
+
+            <h3 class="text-slate-800 font-semibold text-lg mt-8 mb-2">4. Delay Embedding</h3>
+            <p>To reconstruct the underlying dynamical attractor from a scalar time-series, we utilize Takens' Delay Embedding Theorem. 
+            <br/><br/>
+            <strong>Implementation note:</strong> For computational efficiency in this web-based interactive demonstrator, we implement a 2D embedding space $X_n = [x(t), x(t+\tau)]$. Real-world drifting, non-linear, or multimodal systems generally require a 3D (or higher) embedding dimension ($D \ge 3$) according to Whitney's Embedding Theorem ($D = 2M+1$ where $M$ is the manifold dimension).</p>
+
+            <h3 class="text-slate-800 font-semibold text-lg mt-8 mb-2">5. Vietoris-Rips Persistence</h3>
+            <p>We construct a Vietoris-Rips simplicial complex over points sampled from the phase space embedding. Because standard VR computation scales exponentially with the number of points, we adopt a greedy Min-Max Landmark sub-sampling (K=40) before constructing the persistent complex, evaluating birth/death intervals of 1-dimensional homology groups ($H_1$).</p>
+
+            <h3 class="text-slate-800 font-semibold text-lg mt-8 mb-2">6. Detection Metrics</h3>
+            <p>The <strong>Naive DFT Score</strong> calculates the signal-to-noise ratio within a target discrete frequency bin over $O(N^2)$ algorithmic complexity (true FFT implementations execute in $O(N \log N)$ but require robust window padding). <br/>
+            The <strong>STDFT Score</strong> evaluates windowed frequency bands representing Short-Time Discrete Fourier Transform mitigations.<br/>
+            The <strong>TDA Score</strong> returns the summation or maximal interval of the $H_1$ persistence lifetimes ($Death_i - Birth_i$).</p>
+
+            <h3 class="text-slate-800 font-semibold text-lg mt-8 mb-2">7. Dark Matter Axion Proxy (Study 3 Disclaimer)</h3>
+            <p>Study 3 scales amplitudes by $A \propto g B_0 \sqrt{\rho_{DM}} / m_A$, approximating axion-to-photon coupling in haloscope detectors (e.g. ADMX, HAYSTAC). <strong>Note:</strong> This is a phenomenological proxy reproducing key statistical features expected from coherent ultralight dark matter fields (e.g., Rayleigh amplitude fluctuations and Maxwell-Boltzmann line-broadening proxies). It is <em>not</em> a full electrodynamics cavity simulation.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // System Config
+    let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+
+    function randomGaussian() {
+      let u = 0, v = 0;
+      while(u === 0) u = Math.random();
+      while(v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+
+    function generateSignal(params) {
+      let { A, f, fs, N, sigma, noiseType, driftRate, transient, f2, axionProxy } = params;
+      
+      if (axionProxy) {
+          // A is treated as the effective coupling constant g.
+          const rho_dm = 0.45; // GeV/cm^3 local dark matter density
+          const m_a = f;       // axion mass proxy (frequency)
+          const B0 = 8.0;      // strong static magnetic field (Tesla)
+          const C = 0.5;       // cavity form factor / detection constant
+          
+          // Axion to photon conversion amplitude proxy: A_true ~ g * B0 * sqrt(rho_dm) * C / m_a
+          const expected_A = A * B0 * Math.sqrt(rho_dm) * C / m_a;
+          
+          let u1 = 0;
+          while(u1 === 0) u1 = Math.random();
+          let rayleigh = Math.sqrt(-2.0 * Math.log(u1)); 
+          A = expected_A * rayleigh * 0.707; 
+          driftRate = driftRate + (Math.random() - 0.5) * 0.2;
+      }
+
+      const t = new Float32Array(N);
+      const x = new Float32Array(N);
+      
+      for (let i = 0; i < N; i++) t[i] = i / fs;
+      
+      let phase = 0;
+      for (let i = 0; i < N; i++) {
+        const instFreq = f + driftRate * t[i];
+        if (i > 0) phase += 2 * Math.PI * instFreq * (t[i] - t[i-1]);
+        
+        let sigVal = 0;
+        if (transient.active) {
+          if (t[i] >= transient.start && t[i] <= transient.end) sigVal = A * Math.sin(phase);
+        } else {
+          sigVal = A * Math.sin(phase);
+        }
+        
+        if (f2 && f2.active) sigVal += f2.A * Math.sin(2 * Math.PI * f2.f * t[i]);
+        
+        let noiseVal = 0;
+        let rGauss = randomGaussian(); 
+        if (noiseType === 'gaussian') {
+          noiseVal = rGauss * sigma;
+        } else if (noiseType === 'impulsive') {
+          noiseVal = rGauss * sigma;
+          if (Math.random() < 0.05) noiseVal += (Math.random() < 0.5 ? 1 : -1) * 5.0 * sigma;
+        } else if (noiseType === 'pink') {
+          let white = rGauss * sigma;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          let pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+          b6 = white * 0.115926;
+          noiseVal = pink * 0.2; 
+        }
+        x[i] = sigVal + noiseVal;
+      }
+      return { t: Array.from(t), x: Array.from(x) };
+    }
+
+    function computePowerSpectrum(x, fs) {
+      const N = x.length;
+      const maxF = Math.floor(N / 2);
+      const power = new Float32Array(maxF);
+      const freqs = new Float32Array(maxF);
+      
+      for (let k = 0; k < maxF; k++) {
+        let re = 0, im = 0;
+        const angle = -2 * Math.PI * k / N;
+        for (let n = 0; n < N; n++) {
+          re += x[n] * Math.cos(angle * n);
+          im += x[n] * Math.sin(angle * n);
+        }
+        power[k] = Math.sqrt(re * re + im * im) * (2 / N);
+        freqs[k] = (k * fs) / N;
+      }
+      return { freqs: Array.from(freqs), power: Array.from(power) };
+    }
+
+    function computeFFTScore(power, freqs, targetFreq) {
+      let targetIdx = 0, minDiff = Infinity;
+      for (let i = 0; i < freqs.length; i++) {
+        let diff = Math.abs(freqs[i] - targetFreq);
+        if (diff < minDiff) { minDiff = diff; targetIdx = i; }
+      }
+      
+      const window = 2;
+      const start = Math.max(0, targetIdx - window);
+      const end = Math.min(power.length - 1, targetIdx + window);
+      
+      let signalPower = 0, signalCount = 0;
+      for (let i = start; i <= end; i++) {
+        signalPower += Math.pow(power[i], 2);
+        signalCount++;
+      }
+      signalPower /= signalCount;
+      
+      let noisePower = 0, noiseCount = 0;
+      for (let i = 0; i < power.length; i++) {
+        if (i < start || i > end) {
+          noisePower += Math.pow(power[i], 2);
+          noiseCount++;
+        }
+      }
+      noisePower /= (noiseCount || 1);
+      
+      if (noisePower === 0) return 999;
+      return signalPower / noisePower;
+    }
+
+    function computeSTFTScore(x, fs, targetFreq) {
+      const N = x.length;
+      const winSize = Math.floor(fs / 2); // 0.5s window
+      const step = Math.floor(winSize / 2); 
+      let maxScore = 0;
+      for (let w = 0; w <= N - winSize; w += step) {
+        const chunk = new Float32Array(winSize);
+        for (let i = 0; i < winSize; i++) {
+            chunk[i] = x[w + i] * 0.5 * (1 - Math.cos(2 * Math.PI * i / (winSize - 1)));
+        }
+        const { freqs, power } = computePowerSpectrum(chunk, fs);
+        let score = computeFFTScore(power, freqs, targetFreq);
+        if (score > maxScore) maxScore = score;
+      }
+      return maxScore;
+    }
+
+    function computeTakensEmbedding(x, tau) {
+      const N = x.length, pts = [];
+      for (let i = 0; i < N - tau; i++) pts.push([x[i], x[i + tau]]);
+      return pts;
+    }
+
+    function xor(a, b) {
+      let res = [];
+      let i = 0, j = 0;
+      while (i < a.length && j < b.length) {
+          if (a[i] === b[j]) { i++; j++; }
+          else if (a[i] > b[j]) { res.push(a[i]); i++; }
+          else { res.push(b[j]); j++; }
+      }
+      while(i < a.length) res.push(a[i++]);
+      while(j < b.length) res.push(b[j++]);
+      return res;
+    }
+
+    function estimateTauACF(x) {
+      const N = x.length;
+      let mean = 0;
+      for (let i=0; i<N; i++) mean += x[i];
+      mean /= N;
+      
+      let acf0 = 0;
+      for (let i=0; i<N; i++) acf0 += (x[i] - mean)*(x[i] - mean);
+      if (acf0 === 0) return 1;
+
+      for (let tau = 1; tau < Math.floor(N/2); tau++) {
+        let acf = 0;
+        for (let i=0; i<N-tau; i++) acf += (x[i] - mean)*(x[i+tau] - mean);
+        if (acf < 0) return tau;
+      }
+      return 1;
+    }
+
+    function computeTDAScore(pts, returnObj = false) {
+      if (pts.length < 3) return returnObj ? { score: 0, diagram: [] } : 0;
+      const maxLandmarks = 40; 
+      let landmarks = [];
+      let dists = new Float32Array(pts.length).fill(Infinity);
+      let curr = 0;
+      
+      for (let i = 0; i < Math.min(maxLandmarks, pts.length); i++) {
+        landmarks.push(pts[curr]);
+        let maxD = -1, nextCurr = 0;
+        for (let j = 0; j < pts.length; j++) {
+            let dx = pts[j][0] - pts[curr][0], dy = pts[j][1] - pts[curr][1];
+            let d = dx*dx + dy*dy;
+            if (d < dists[j]) dists[j] = d;
+            if (dists[j] > maxD) { maxD = dists[j]; nextCurr = j; }
+        }
+        curr = nextCurr;
+      }
+      
+      const K = landmarks.length;
+      let edges = [];
+      for (let i = 0; i < K; i++) {
+        for (let j = i + 1; j < K; j++) {
+            let dx = landmarks[i][0] - landmarks[j][0], dy = landmarks[i][1] - landmarks[j][1];
+            edges.push({ u: i, v: j, w: Math.sqrt(dx*dx + dy*dy) });
+        }
+      }
+      
+      let simplices = [];
+      let id_counter = 0;
+      for (let i = 0; i < K; i++) simplices.push({ dim: 0, idxs: [i], w: 0, id: id_counter++ });
+      for (let e of edges) simplices.push({ dim: 1, idxs: [e.u, e.v], w: e.w, id: id_counter++ });
+      
+      for (let i = 0; i < K; i++) {
+        for (let j = i + 1; j < K; j++) {
+            for (let k = j + 1; k < K; k++) {
+                let w1 = Math.sqrt(Math.pow(landmarks[i][0]-landmarks[j][0], 2) + Math.pow(landmarks[i][1]-landmarks[j][1], 2));
+                let w2 = Math.sqrt(Math.pow(landmarks[j][0]-landmarks[k][0], 2) + Math.pow(landmarks[j][1]-landmarks[k][1], 2));
+                let w3 = Math.sqrt(Math.pow(landmarks[i][0]-landmarks[k][0], 2) + Math.pow(landmarks[i][1]-landmarks[k][1], 2));
+                simplices.push({ dim: 2, idxs: [i, j, k], w: Math.max(w1, w2, w3), id: id_counter++ });
+            }
+        }
+      }
+      
+      simplices.sort((a, b) => a.w !== b.w ? a.w - b.w : a.dim - b.dim);
+      let idMap = new Map();
+      simplices.forEach((s, idx) => { idMap.set(s.idxs.join(','), idx); });
+      
+      let R = new Array(simplices.length);
+      for (let i = 0; i < simplices.length; i++) {
+          let s = simplices[i];
+          let col = [];
+          if (s.dim === 1) {
+              col.push(idMap.get(s.idxs[0].toString())); col.push(idMap.get(s.idxs[1].toString()));
+          } else if (s.dim === 2) {
+              col.push(idMap.get([s.idxs[1], s.idxs[2]].join(',')));
+              col.push(idMap.get([s.idxs[0], s.idxs[2]].join(',')));
+              col.push(idMap.get([s.idxs[0], s.idxs[1]].join(',')));
+          }
+          col.sort((a,b) => b - a);
+          R[i] = col;
+      }
+      
+      let low = new Map();
+      let persistences = [];
+      let diagram = [];
+      
+      for (let j = 0; j < simplices.length; j++) {
+          let c = R[j];
+          while (c.length > 0) {
+              let low_c = c[0];
+              if (low.has(low_c)) c = xor(c, R[low.get(low_c)]);
+              else break;
+          }
+          R[j] = c;
+          if (c.length > 0) {
+              let low_c = c[0];
+              low.set(low_c, j);
+              let creator = simplices[low_c];
+              let destroyer = simplices[j];
+              if (creator.dim === 1) {
+                  persistences.push(destroyer.w - creator.w);
+                  diagram.push({ birth: creator.w, death: destroyer.w });
+              }
+          }
+      }
+      
+      let living_H1 = [];
+      if (simplices.length > 0) {
+          let maxW = simplices[simplices.length-1].w * 1.5; 
+          for (let i = 0; i < simplices.length; i++) {
+              if (simplices[i].dim === 1 && R[i].length === 0 && !low.has(i)) {
+                  living_H1.push(maxW - simplices[i].w);
+                  diagram.push({ birth: simplices[i].w, death: maxW });
+              }
+          }
+      }
+      
+      let allH1 = persistences.concat(living_H1);
+      let sumH1 = 0;
+      for (let i = 0; i < allH1.length; i++) sumH1 += allH1[i];
+      return returnObj ? { score: sumH1, diagram: diagram } : sumH1;
+    }
+
+    // App State - Visualizer Levels
+    const LEVELS = [
+      { id: 0, title: 'Level 0: Sanity Check', description: 'Baseline behavior check. Slide amplitude (A) to 1.0 to see the perfect circle and sharp peak. Both algorithms easily identify the pure sine wave.', defaultParams: { A: 1.0, f: 5.0, sigma: 0.1, noiseType: 'gaussian', driftRate: 0, transient: { active: false, start: 3, end: 5 }, f2: { active: false } } },
+      { id: 1, title: 'Level 1: Stationary Phase Space', description: 'Tests detection boundaries under stationary Gaussian noise. Start dropping the amplitude into the high noise regime to visually observe the topological loop vanishing.', defaultParams: { A: 0.2, f: 5.0, sigma: 1.0, noiseType: 'gaussian', driftRate: 0, transient: { active: false, start: 3, end: 5 }, f2: { active: false } } },
+      { id: 2, title: 'Level 2: Non-Stationary Phase (Drift)', description: 'Simulates frequency modulation over time. DFT expects a singular frequency vector, thus energy spreads across bins (SNR collapses). TDA loops merely rotate and deform, retaining topology longer.', defaultParams: { A: 0.5, f: 5.0, sigma: 0.2, noiseType: 'gaussian', driftRate: 0.8, transient: { active: false, start: 3, end: 5 }, f2: { active: false } } },
+      { id: 3, title: 'Level 3: Physical Detector Noise', description: 'Replicates Pink noise (1/f) representing thermal environments, or Impulsive noise representing digital misfires. Outliers disrupt delay geometries.', defaultParams: { A: 0.3, f: 5.0, sigma: 0.2, noiseType: 'pink', driftRate: 0, transient: { active: false, start: 3, end: 5 }, f2: { active: false } } },
+      { id: 4, title: 'Level 4: Dark Matter Axion Proxy', description: 'Simulates an ultralight dark matter candidate. Combines macroscopic frequency drift (from Earth velocity across the halo), physically motivated 1/f thermal pink noise, and weak amplitude. The ultimate testbed.', defaultParams: { A: 0.2, f: 5.0, sigma: 0.5, noiseType: 'pink', driftRate: 0.3, transient: { active: false, start: 3, end: 5 }, f2: { active: false } } }
+    ];
+
+    let currentParams = { A: 1.0, f: 5.0, fs: 100.0, N: 1000, sigma: 0.0, noiseType: 'gaussian', driftRate: 0, transient: { active: false, start: 3, end: 5 }, f2: { active: false, A:0, f:0 } };
+    let chartTimeSeries, chartFFT, chartTDA, chartExp, chartDiagram;
+
+    function initCharts() {
+      Chart.defaults.font.family = "'Inter', ui-sans-serif, system-ui, sans-serif";
+      Chart.defaults.color = "#64748b";
+
+      chartTimeSeries = new Chart(document.getElementById('chart-timeseries').getContext('2d'), {
+        type: 'line',
+        data: { datasets: [{ label: 'Signal + Noise', borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { intersect: false, mode: 'index' } },
+          scales: { x: { type: 'linear', min: 0, max: 10, title: { display: true, text: 'Time (s)' } }, y: { type: 'linear', min: -3, max: 3 } },
+          animation: false, elements: { line: { tension: 0.2 } }
+        }
+      });
+      
+      chartFFT = new Chart(document.getElementById('chart-fft').getContext('2d'), {
+        type: 'bar',
+        data: { datasets: [{ label: 'Power', backgroundColor: '#3b82f6', barPercentage: 1.0, categoryPercentage: 1.0 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { type: 'linear', min: 0, max: 20, title: { display: true, text: 'Frequency (Hz)' } }, y: { type: 'linear', beginAtZero: true } },
+          animation: false
+        }
+      });
+
+      chartTDA = new Chart(document.getElementById('chart-tda').getContext('2d'), {
+        type: 'scatter',
+        data: { datasets: [{ label: 'Embedding', backgroundColor: '#f97316', pointRadius: 2.5, pointHoverRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { type: 'linear', min: -3, max: 3, title: { display: true, text: 'x(t)' } }, y: { type: 'linear', min: -3, max: 3, title: { display: true, text: 'x(t + τ)' } } },
+          animation: false
+        }
+      });
+      
+      chartDiagram = new Chart(document.getElementById('chart-diagram').getContext('2d'), {
+        type: 'scatter',
+        data: { datasets: [{ label: 'Features', backgroundColor: '#ec4899', pointRadius: 4, pointHoverRadius: 6 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { type: 'linear', min: 0, title: { display: true, text: 'Birth' } }, y: { type: 'linear', min: 0, title: { display: true, text: 'Death' } } },
+          animation: false
+        }
+      });
+      
+      chartExp = new Chart(document.getElementById('chart-experiment').getContext('2d'), {
+        type: 'line',
+        data: { labels: [], datasets: [
+            { label: 'Naïve DFT TPR', borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, data: [], tension: 0.2, pointRadius: 4 },
+            { label: 'STDFT TPR', borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, data: [], tension: 0.2, pointRadius: 4 },
+            { label: 'TDA TPR', borderColor: '#f97316', backgroundColor: '#f97316', borderWidth: 3, data: [], tension: 0.2, pointRadius: 5 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${(ctx.raw * 100).toFixed(1)}%` } } },
+          scales: { x: { title: { display: true, text: 'X Axis' } }, y: { min: 0, max: 1.05, ticks: { callback: v => `${(v*100).toFixed(0)}%` }, title: {display: true, text: 'Detection Prob.'} } },
+          animation: { duration: 0 }
+        }
+      });
+    }
+
+    function updateVisualizer() {
+      const { t, x } = generateSignal(currentParams);
+      const { freqs, power } = computePowerSpectrum(x, currentParams.fs);
+      const tau = estimateTauACF(x);
+      const embedding = computeTakensEmbedding(x, tau);
+      
+      const fftScore = computeFFTScore(power, freqs, currentParams.f);
+      const { score: tdaScore, diagram } = computeTDAScore(embedding, true);
+      
+      let maxPersistence = 0;
+      diagram.forEach(p => maxPersistence = Math.max(maxPersistence, p.death - p.birth));
+
+      document.getElementById('metric-fft').textContent = fftScore > 100 ? '>100' : fftScore.toFixed(2);
+      document.getElementById('metric-tda').textContent = tdaScore.toFixed(3);
+      document.getElementById('metric-tda-max').textContent = maxPersistence.toFixed(3);
+
+      chartTimeSeries.data.datasets[0].data = t.map((time, i) => ({ x: time, y: x[i] }));
+      chartTimeSeries.update();
+
+      chartFFT.data.datasets[0].data = freqs.map((f, i) => ({ x: f, y: power[i] }));
+      chartFFT.update();
+
+      chartTDA.data.datasets[0].data = embedding.map(p => ({ x: p[0], y: p[1] }));
+      chartTDA.update();
+      
+      chartDiagram.data.datasets[0].data = diagram.map(p => ({ x: p.birth, y: p.death }));
+      let maxD = 0; 
+      diagram.forEach(p => maxD = Math.max(maxD, p.death));
+      if (maxD > 0) {
+         chartDiagram.options.scales.x.max = maxD * 1.1;
+         chartDiagram.options.scales.y.max = maxD * 1.1;
+      }
+      chartDiagram.update();
+      
+      document.getElementById('chart1-title').textContent = currentParams.transient.active ? 'Time Series (Transient: 3s - 5s Only)' : 'Real-Time Signal x(t)';
+      document.getElementById('chart3-title').textContent = 'TDA: Delay Embedding (τ = ' + tau + ' ACF zero-cross)';
+    }
+
+    function selectLevel(id) {
+      const lvl = LEVELS.find(l => l.id === id);
+      currentParams = { ...currentParams, ...lvl.defaultParams };
+      currentParams.noiseType = lvl.defaultParams.noiseType || 'gaussian';
+      
+      document.getElementById('level-description').innerHTML = lvl.description;
+      
+      const levelsContainer = document.getElementById('levels-container');
+      levelsContainer.innerHTML = '';
+      LEVELS.forEach(level => {
+        const btn = document.createElement('button');
+        btn.textContent = level.title;
+        btn.className = "w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium " + 
+          (level.id === id ? "bg-emerald-50 text-emerald-700 font-semibold" : "text-slate-600 hover:bg-slate-100");
+        btn.onclick = () => selectLevel(level.id);
+        levelsContainer.appendChild(btn);
+      });
+      syncInputs(); updateVisualizer();
+    }
+
+    function syncInputs() {
+      document.getElementById('input_A').value = currentParams.A; document.getElementById('val_A').textContent = currentParams.A.toFixed(2);
+      document.getElementById('input_sigma').value = currentParams.sigma; document.getElementById('val_sigma').textContent = currentParams.sigma.toFixed(2);
+      document.getElementById('input_f').value = currentParams.f; document.getElementById('val_f').textContent = currentParams.f.toFixed(2);
+      
+      document.getElementById('drift-container').style.display = 'block';
+      document.getElementById('input_driftRate').value = currentParams.driftRate || 0;
+      document.getElementById('val_driftRate').textContent = (currentParams.driftRate || 0).toFixed(2);
+      
+      const gBtn = document.getElementById('btn-noise-gaussian'); const iBtn = document.getElementById('btn-noise-impulsive'); const pBtn = document.getElementById('btn-noise-pink');
+      [gBtn, iBtn, pBtn].forEach(b => b.className = "flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-white text-slate-600 border-slate-200");
+      if (currentParams.noiseType === 'gaussian') gBtn.className = "flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-slate-800 text-white border-slate-800";
+      else if (currentParams.noiseType === 'impulsive') iBtn.className = "flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-slate-800 text-white border-slate-800";
+      else if (currentParams.noiseType === 'pink') pBtn.className = "flex-1 px-2 py-1.5 text-xs rounded-md border font-medium bg-slate-800 text-white border-slate-800";
+    }
+
+    function updateParam(param, val) {
+      if (param === 'noiseType') currentParams[param] = val;
+      else currentParams[param] = parseFloat(val);
+      syncInputs(); updateVisualizer();
+    }
+
+    // Experiment Handling
+    let currentStudy = 1;
+
+    function selectStudy(id) {
+      currentStudy = id;
+      [1, 2, 3, 4, 5].forEach(sid => {
+        const btn = document.getElementById(`btn-study-${sid}`);
+        if(btn) btn.className = (sid === id) 
+          ? "w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium bg-emerald-50 text-emerald-700"
+          : "w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 font-medium text-slate-600 hover:bg-slate-100";
+      });
+      const desc = document.getElementById('study-description');
+      if (id === 1) desc.innerHTML = "<strong>Study 1: Base Amplitude Sweep</strong><br/><br/>Stationarity holds. Varies Signal Amplitude (A) from 1.0 down to 0.01 under fixed Gaussian Noise (σ=1.0). Evaluates True Positive Rate at a fixed strict 5% False Positive Rate (FPR) derived from pure noise.";
+      if (id === 2) desc.innerHTML = "<strong>Study 2: Frequency Drift Tolerance</strong><br/><br/>Simulates non-stationarity. Varies Drift (Hz/s) from 0.0 to 1.5 (A=0.5, σ=0.5). DFT energy smears resulting in SNR collapse, STDFT mitigates it somewhat, while TDA correctly identifies the preserved topological cycle. This is the <em>unexpected advantage</em> of TDA.";
+      if (id === 3) desc.innerHTML = "<strong>Study 3: Dark Matter Axion Proxy</strong><br/><br/>Physically motivated proxy inspired by arXiv:1908.04797. Base amplitude derived from fundamental parameters: A &propto; g B<sub>0</sub> &radic;&rho;<sub>DM</sub> / m<sub>A</sub>. We sweep the effective coupling g. Simulation accounts for finite coherence time (τ<sub>c</sub> ~ 10⁶ periods) by drawing observation amplitudes from a Rayleigh distribution across Monte Carlo realizations, with frequency drift induced by Maxwell-Boltzmann halo velocity dispersion. Evaluated at 5% FPR. <em>(Note: Phenomenological proxy only)</em>";
+      if (id === 4) desc.innerHTML = "<strong>Study 4: ROC Analysis (Detection Theory)</strong><br/><br/>Plots True Positive Rate vs False Positive Rate. Uses a continuous threshold sweep over 500 noise and 500 signal realizations (A=0.4, Drift=0.5). Directly compares the classification power of Naïve DFT vs STDFT vs TDA.";
+      if (id === 5) desc.innerHTML = "<strong>Study 5: Runtime Complexity</strong><br/><br/>Benchmarks the computational cost. TDA computing Vietoris-Rips persistence is structurally O(K³) where K is the number of landmarks. Compares execution time in milliseconds across DFT, STDFT, and TDA pipelines as sequence length N grows.";
+    }
+
+    function switchTab(tab) {
+      document.getElementById('tab-visualizer').className = "px-4 py-1.5 text-sm font-medium rounded-md transition-colors text-slate-400 hover:text-slate-200";
+      document.getElementById('tab-experiment').className = "px-4 py-1.5 text-sm font-medium rounded-md transition-colors text-slate-400 hover:text-slate-200";
+      document.getElementById('tab-documentation').className = "px-4 py-1.5 text-sm font-medium rounded-md transition-colors text-slate-400 hover:text-slate-200";
+      
+      document.getElementById('sidebar-visualizer').classList.add('hidden');
+      document.getElementById('sidebar-experiment').classList.add('hidden');
+      document.getElementById('view-visualizer').classList.add('hidden');
+      document.getElementById('view-experiment').classList.add('hidden');
+      document.getElementById('view-documentation').classList.add('hidden');
+
+      if (tab === 'visualizer') {
+        document.getElementById('tab-visualizer').className = "px-4 py-1.5 text-sm font-medium rounded-md transition-colors bg-slate-700 text-white";
+        document.getElementById('sidebar-visualizer').classList.remove('hidden'); 
+        document.getElementById('view-visualizer').classList.remove('hidden');
+      } else if (tab === 'experiment') {
+        document.getElementById('tab-experiment').className = "px-4 py-1.5 text-sm font-medium rounded-md transition-colors bg-slate-700 text-white";
+        document.getElementById('sidebar-experiment').classList.remove('hidden'); 
+        document.getElementById('view-experiment').classList.remove('hidden');
+      } else if (tab === 'documentation') {
+        document.getElementById('tab-documentation').className = "px-4 py-1.5 text-sm font-medium rounded-md transition-colors bg-slate-700 text-white";
+        // documentation has no sidebar, expands to full width
+        document.getElementById('view-documentation').classList.remove('hidden');
+      }
+    }
+
+    async function runExperiment() {
+      const btn = document.getElementById('btn-run-exp');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="animate-spin mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Generating...';
+      document.getElementById('experiment-empty').style.display = 'none';
+
+      let paramKeys = [];
+      let baseP = { A: 0, f: 5.0, fs: 100.0, N: 1000, sigma: 1.0, noiseType: 'gaussian', driftRate: 0, transient: { active: false }, f2: { active: false }, axionProxy: false };
+      
+      if (currentStudy === 1) {
+          paramKeys = [1.0, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
+          baseP.sigma = 1.0; baseP.noiseType = 'gaussian'; baseP.driftRate = 0.0;
+          chartExp.options.scales.x.title.text = 'Signal Amplitude (Fixed σ=1.0)';
+          chartExp.options.scales.y.title.text = 'Detection Prob. (Fixed 5% FPR)';
+      } else if (currentStudy === 2) {
+          paramKeys = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
+          baseP.A = 0.5; baseP.sigma = 0.5; baseP.noiseType = 'gaussian';
+          chartExp.options.scales.x.title.text = 'Frequency Drift Rate (Hz/s) with Fixed A=0.5';
+          chartExp.options.scales.y.title.text = 'Detection Prob. (Fixed 5% FPR)';
+      } else if (currentStudy === 3) {
+          paramKeys = [0.5, 0.25, 0.1, 0.05, 0.025, 0.01];
+          baseP.sigma = 0.5; baseP.noiseType = 'pink'; baseP.driftRate = 0.2; baseP.axionProxy = true;
+          chartExp.options.scales.x.title.text = 'Expected Amplitude (A_rms) [Axion Proxy]';
+          chartExp.options.scales.y.title.text = 'Detection Prob. (Fixed 5% FPR)';
+      } else if (currentStudy === 4) {
+          chartExp.options.scales.x.title.text = 'False Positive Rate (FPR)';
+          chartExp.options.scales.y.title.text = 'True Positive Rate (TPR)';
+      } else if (currentStudy === 5) {
+          paramKeys = [200, 400, 600, 800, 1000, 1500, 2000];
+          baseP.A = 1.0; baseP.sigma = 0.5;
+          chartExp.options.scales.x.title.text = 'Number of Samples (N)';
+          chartExp.options.scales.y.title.text = 'Execution Time (ms)';
+      }
+
+      chartExp.data.datasets[0].data = [];
+      chartExp.data.datasets[1].data = [];
+      chartExp.data.datasets[2].data = [];
+      const tbody = document.getElementById('experiment-table-body');
+      tbody.innerHTML = '';
+      
+      const theadTitle = document.getElementById('th-param');
+      if (theadTitle) {
+          if (currentStudy === 4) theadTitle.textContent = 'False Positive Rate (FPR)';
+          else if (currentStudy === 2) theadTitle.textContent = 'Drift (Hz/s)';
+          else if (currentStudy === 5) theadTitle.textContent = 'Samples (N)';
+          else if (currentStudy === 3) theadTitle.textContent = 'Coupling (g)';
+          else theadTitle.textContent = 'Amplitude (A)';
+      }
+      
+      // ----------- STUDY 5: RUNTIME COMPLEXITY -----------
+      if (currentStudy === 5) {
+          chartExp.data.labels = paramKeys.map(k => k.toString());
+          for (let N of paramKeys) {
+             let runFFT = 0, runSTFT = 0, runTDA = 0;
+             let trials = 5;
+             let pRun = {...baseP, N: N};
+             
+             for(let r=0; r<trials; r++) {
+                 const { x: nx } = generateSignal(pRun);
+                 
+                 let t0 = performance.now();
+                 const { freqs: fq, power: pwr } = computePowerSpectrum(nx, 100.0);
+                 computeFFTScore(pwr, fq, 5.0);
+                 runFFT += performance.now() - t0;
+                 
+                 t0 = performance.now();
+                 computeSTFTScore(nx, 100.0, 5.0);
+                 runSTFT += performance.now() - t0;
+                 
+                 t0 = performance.now();
+                 computeTDAScore(computeTakensEmbedding(nx, estimateTauACF(nx)));
+                 runTDA += performance.now() - t0;
+             }
+             
+             runFFT /= trials; runSTFT /= trials; runTDA /= trials;
+             
+             chartExp.data.datasets[0].data.push(runFFT);
+             chartExp.data.datasets[1].data.push(runSTFT);
+             chartExp.data.datasets[2].data.push(runTDA);
+             chartExp.update();
+             
+             let tr = document.createElement('tr');
+             tr.className = "border-b border-slate-100 hover:bg-slate-50 transition-colors";
+             let margin = runTDA / (runSTFT || 1);
+             
+             tr.innerHTML = `
+                <td class="px-5 py-3 text-sm font-mono text-slate-800 font-medium">N = ${N}</td>
+                <td class="px-5 py-3 text-sm text-slate-700">${runFFT.toFixed(2)} ms</td>
+                <td class="px-5 py-3 text-sm text-slate-700">${runSTFT.toFixed(2)} ms</td>
+                <td class="px-5 py-3 text-sm font-semibold text-orange-600">${runTDA.toFixed(2)} ms</td>
+                <td class="px-5 py-3"><span class="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-600 rounded">TDA is ${margin.toFixed(1)}x STFT</span></td>
+             `;
+             tbody.appendChild(tr);
+             await new Promise(resolve => setTimeout(resolve, 30));
+          }
+      }
+      // ----------- STUDY 4: ROC ANALYSIS ----------- 
+      else if (currentStudy === 4) {
+          const nTrials = 500;
+          let pNull = {...baseP, A: 0, sigma: 0.5, driftRate: 0.5};
+          let pSig = {...baseP, A: 0.4, sigma: 0.5, driftRate: 0.5};
+          
+          let nFFT = [], nSTFT = [], nTDA = [], sFFT = [], sSTFT = [], sTDA = [];
+          
+          for(let r=0; r<nTrials; r++) { 
+              let nx = generateSignal(pNull).x;
+              let pwr0 = computePowerSpectrum(nx, 100.0);
+              nFFT.push(computeFFTScore(pwr0.power, pwr0.freqs, 5.0));
+              nSTFT.push(computeSTFTScore(nx, 100.0, 5.0));
+              nTDA.push(computeTDAScore(computeTakensEmbedding(nx, estimateTauACF(nx))));
+              
+              let sx = generateSignal(pSig).x;
+              let pwr1 = computePowerSpectrum(sx, 100.0);
+              sFFT.push(computeFFTScore(pwr1.power, pwr1.freqs, 5.0));
+              sSTFT.push(computeSTFTScore(sx, 100.0, 5.0));
+              sTDA.push(computeTDAScore(computeTakensEmbedding(sx, estimateTauACF(sx))));
+              if (r % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0)); // yield
+          }
+          
+          nFFT.sort((a,b)=>a-b);
+          nSTFT.sort((a,b)=>a-b);
+          nTDA.sort((a,b)=>a-b);
+          
+          let rocFFT = [], rocSTFT = [], rocTDA = [];
+          let labels = [];
+          
+          for (let i=0; i<=20; i++) {
+             let fpr = i / 20.0;
+             labels.push(fpr.toFixed(2));
+             
+             let idx = Math.min(nTrials-1, Math.floor((1 - fpr) * nTrials));
+             let tFFT = nFFT[idx], tSTFT = nSTFT[idx], tTDA = nTDA[idx];
+             
+             if (fpr === 0.0) { tFFT = nFFT[nTrials-1] + 1; tSTFT = nSTFT[nTrials-1] + 1; tTDA = nTDA[nTrials-1] + 0.1; }
+             if (fpr === 1.0) { tFFT = nFFT[0] - 1; tSTFT = nSTFT[0] - 1; tTDA = nTDA[0] - 0.1; }
+             
+             let tprFFT = sFFT.filter(v => v >= tFFT).length / nTrials;
+             let tprSTFT = sSTFT.filter(v => v >= tSTFT).length / nTrials;
+             let tprTDA = sTDA.filter(v => v >= tTDA).length / nTrials;
+             
+             rocFFT.push(tprFFT);
+             rocSTFT.push(tprSTFT);
+             rocTDA.push(tprTDA);
+             
+             if (i === 1 || i === 2 || i === 4 || i === 10) { 
+                 let tr = document.createElement('tr');
+                 tr.className = "border-b border-slate-100 hover:bg-slate-50 transition-colors";
+                 let bestOther = Math.max(tprFFT, tprSTFT);
+                 let margin = tprTDA - bestOther;
+                 let winDisplay = margin > 0.05 ? `<span class="bg-orange-100 text-orange-700 px-2 py-1 flex items-center w-fit rounded text-xs font-semibold uppercase">TDA +${(margin*100).toFixed(0)}%</span>` : `<span class="bg-blue-100 text-blue-700 px-2 py-1 flex items-center w-fit rounded text-xs font-semibold uppercase">Best +${Math.abs(margin*100).toFixed(0)}%</span>`;
+                 tr.innerHTML = `
+                    <td class="px-5 py-3 text-sm font-mono text-slate-800 font-medium">FPR = ${(fpr*100).toFixed(0)}%</td>
+                    <td class="px-5 py-3 text-sm text-slate-700">${(tprFFT * 100).toFixed(1)}%</td>
+                    <td class="px-5 py-3 text-sm text-slate-700">${(tprSTFT * 100).toFixed(1)}%</td>
+                    <td class="px-5 py-3 text-sm text-slate-700">${(tprTDA * 100).toFixed(1)}%</td>
+                    <td class="px-5 py-3">${winDisplay}</td>`;
+                 tbody.appendChild(tr);
+             }
+          }
+          
+          let aucFFT = 0, aucSTFT = 0, aucTDA = 0;
+          for (let i = 1; i <= 20; i++) {
+              aucFFT += (rocFFT[i-1] + rocFFT[i]) * 0.5 * 0.05;
+              aucSTFT += (rocSTFT[i-1] + rocSTFT[i]) * 0.5 * 0.05;
+              aucTDA += (rocTDA[i-1] + rocTDA[i]) * 0.5 * 0.05;
+          }
+          
+          let trAuc = document.createElement('tr');
+          trAuc.className = "border-t border-slate-200 bg-slate-50";
+          let aucBest = Math.max(aucFFT, aucSTFT);
+          let aucMargin = aucTDA - aucBest;
+          let aucWinDisplay = aucMargin > 0.02 ? `<span class="bg-orange-100 text-orange-700 px-2 py-1 flex items-center w-fit rounded text-xs font-semibold uppercase">TDA +${(aucMargin).toFixed(2)}</span>` : `<span class="bg-blue-100 text-blue-700 px-2 py-1 flex items-center w-fit rounded text-xs font-semibold uppercase">Best +${Math.abs(aucMargin).toFixed(2)}</span>`;
+          
+          trAuc.innerHTML = `
+            <td class="px-5 py-3 text-sm font-semibold text-slate-800">Area Under Curve (AUC)</td>
+            <td class="px-5 py-3 text-sm font-semibold text-slate-800">${aucFFT.toFixed(3)}</td>
+            <td class="px-5 py-3 text-sm font-semibold text-slate-800">${aucSTFT.toFixed(3)}</td>
+            <td class="px-5 py-3 text-sm font-semibold text-slate-800">${aucTDA.toFixed(3)}</td>
+            <td class="px-5 py-3">${aucWinDisplay}</td>
+          `;
+          tbody.appendChild(trAuc);
+
+          chartExp.data.labels = labels;
+          chartExp.data.datasets[0].data = rocFFT;
+          chartExp.data.datasets[1].data = rocSTFT;
+          chartExp.data.datasets[2].data = rocTDA;
+          chartExp.update();
+      } 
+      // ----------- STUDIES 1 - 3: SWEEPS -----------
+      else {
+          chartExp.data.labels = paramKeys.map(k => k.toString());
+          
+          // Generate Noise to find 5% FPR Threshold (95th percentile)
+          let nFFT = [], nSTFT = [], nTDA = [];
+          for(let r=0; r<200; r++) { 
+              let pNull = {...baseP, A: 0};
+              const { x: nx } = generateSignal(pNull);
+              const { freqs: fq, power: pwr } = computePowerSpectrum(nx, 100.0);
+              nFFT.push(computeFFTScore(pwr, fq, 5.0));
+              nSTFT.push(computeSTFTScore(nx, 100.0, 5.0));
+              nTDA.push(computeTDAScore(computeTakensEmbedding(nx, estimateTauACF(nx))));
+          }
+          nFFT.sort((a,b)=>a-b);
+          nSTFT.sort((a,b)=>a-b);
+          nTDA.sort((a,b)=>a-b);
+          
+          const fftThresh95 = nFFT[Math.floor(200 * 0.95)];
+          const stftThresh95 = nSTFT[Math.floor(200 * 0.95)];
+          const tdaThresh95 = nTDA[Math.floor(200 * 0.95)];
+
+          const nReals = 150; 
+          for (let k of paramKeys) {
+              let fftDetects = 0, stftDetects = 0, tdaDetects = 0;
+              let pRun = {...baseP};
+              if (currentStudy === 1 || currentStudy === 3) pRun.A = k;
+              if (currentStudy === 2) pRun.driftRate = k;
+              
+              for(let r=0; r<nReals; r++) {
+                  const { x: nx } = generateSignal(pRun);
+                  const { freqs: fq, power: pwr } = computePowerSpectrum(nx, 100.0);
+                  const fScore = computeFFTScore(pwr, fq, 5.0);
+                  const sScore = computeSTFTScore(nx, 100.0, 5.0);
+                  const tScore = computeTDAScore(computeTakensEmbedding(nx, estimateTauACF(nx)));
+                  
+                  if (fScore > fftThresh95) fftDetects++;
+                  if (sScore > stftThresh95) stftDetects++;
+                  if (tScore > tdaThresh95) tdaDetects++;
+              }
+              
+              let rateFFT = fftDetects / nReals;
+              let rateSTFT = stftDetects / nReals;
+              let rateTDA = tdaDetects / nReals;
+              
+              let errFFT = Math.sqrt(rateFFT * (1 - rateFFT) / nReals) * 100;
+              let errSTFT = Math.sqrt(rateSTFT * (1 - rateSTFT) / nReals) * 100;
+              let errTDA = Math.sqrt(rateTDA * (1 - rateTDA) / nReals) * 100;
+              
+              chartExp.data.datasets[0].data.push(rateFFT);
+              chartExp.data.datasets[1].data.push(rateSTFT);
+              chartExp.data.datasets[2].data.push(rateTDA);
+              chartExp.update();
+
+              let tr = document.createElement('tr');
+              tr.className = "border-b border-slate-100 hover:bg-slate-50 transition-colors";
+              
+              let bestOther = Math.max(rateFFT, rateSTFT);
+              let margin = rateTDA - bestOther;
+              let winDisplay = "";
+              if (margin > 0.05) winDisplay = `<span class="bg-orange-100 text-orange-700 px-2 py-1 flex items-center w-fit rounded text-xs font-semibold uppercase"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" class="mr-1" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg> TDA +${(margin*100).toFixed(0)}%</span>`;
+              else if (margin < -0.05) winDisplay = `<span class="bg-blue-100 text-blue-700 px-2 py-1 flex items-center w-fit rounded text-xs font-semibold uppercase"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" class="mr-1" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg> Best +${Math.abs(margin*100).toFixed(0)}%</span>`;
+              else winDisplay = `<span class="text-slate-400 text-sm font-medium">Statistical Tie</span>`;
+              
+              let labelText = '';
+              if (currentStudy === 2) labelText = `${k} Hz/s`;
+              else if (currentStudy === 3) labelText = `g = ${k}`;
+              else labelText = `A = ${k}`;
+              
+              tr.innerHTML = `
+                <td class="px-5 py-3 text-sm font-mono text-slate-800 font-medium">${labelText}</td>
+                <td class="px-5 py-3 text-sm text-slate-700">${(rateFFT * 100).toFixed(1)} ± ${errFFT.toFixed(1)}%</td>
+                <td class="px-5 py-3 text-sm text-slate-700">${(rateSTFT * 100).toFixed(1)} ± ${errSTFT.toFixed(1)}%</td>
+                <td class="px-5 py-3 text-sm text-slate-700">${(rateTDA * 100).toFixed(1)} ± ${errTDA.toFixed(1)}%</td>
+                <td class="px-5 py-3">${winDisplay}</td>
+              `;
+              tbody.appendChild(tr);
+              
+              await new Promise(resolve => setTimeout(resolve, 30)); 
+          }
+      }
+      
+      btn.disabled = false;
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run Experiment';
+    }
+
+    window.onload = () => {
+      initCharts();
+      selectLevel(0);
+      selectStudy(1);
+    };
+  </script>
+</body>
+</html>
